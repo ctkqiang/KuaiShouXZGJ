@@ -52,51 +52,91 @@ const __play_video_ = false
  *
  */
 
-async function fetchHtmlWithPuppeteer (pageUrl: string): Promise<string> {
+async function fetchHtmlWithPuppeteer (
+  pageUrl: string,
+  retries = 3
+): Promise<string> {
   console.log(chalk.blue('\n📱 快手视频下载器启动中...\n'))
-  console.log(
-    chalk.cyan(
-      `🚀 正在启动浏览器解析页面: ${chalk.underline(pageUrl).slice(0, 50)}`
-    )
-  )
 
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    executablePath: await Bun.which('chrome')
-  })
-
-  const page = await browser.newPage()
-
-  await page.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36'
-  )
-
-  await page.goto(pageUrl, { waitUntil: 'networkidle2' })
-
-  // 确保 JavaScript 加载完
-  await page
-    .waitForSelector('video.player-video', { timeout: 5000 })
-    .catch(() => {
-      console.warn(
-        chalk.yellow(
-          "\n⚠️  警告：没找到 'video.player-video'，可能需要手动解析"
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(
+        chalk.cyan(
+          `🚀 正在启动浏览器解析页面 (第 ${attempt} 次尝试): ${chalk
+            .underline(pageUrl)
+            .slice(0, 50)}`
         )
       )
-    })
 
-  // 获取视频链接
-  const videoSrc = await page.evaluate(() => {
-    const video = document.querySelector(
-      'video.player-video'
-    ) as HTMLVideoElement
-    return video ? video.src : null
-  })
+      const browser = await puppeteer.launch({
+        headless: 'new',
+        executablePath: await Bun.which('chrome'),
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--window-size=1920x1080',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process'
+        ]
+      })
 
-  await browser.close()
+      const page = await browser.newPage()
 
-  if (!videoSrc)
-    throw new Error('❌ 无法获取视频地址，请检查网页内容或更新选择器')
-  return videoSrc
+      // 设置更长的超时时间
+      page.setDefaultNavigationTimeout(120000) // 2分钟
+      page.setDefaultTimeout(120000)
+
+      // 设置更多请求头
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+      })
+
+      await page.setUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      )
+
+      // 等待页面加载
+      await page.goto(pageUrl, {
+        waitUntil: ['networkidle2', 'domcontentloaded', 'load'],
+        timeout: 120000
+      })
+
+      // 等待视频元素
+      await page.waitForSelector('video.player-video', {
+        timeout: 120000,
+        visible: true
+      })
+
+      // 获取视频链接
+      const videoSrc = await page.evaluate(() => {
+        const video = document.querySelector(
+          'video.player-video'
+        ) as HTMLVideoElement
+        return video ? video.src : null
+      })
+
+      await browser.close()
+
+      if (videoSrc) {
+        return videoSrc
+      }
+
+      throw new Error('未找到视频源地址')
+    } catch (error) {
+      if (attempt === retries) {
+        throw new Error(`视频解析失败 (已重试 ${retries} 次): ${error.message}`)
+      }
+      console.log(chalk.yellow(`\n⚠️ 第 ${attempt} 次尝试失败，正在重试...\n`))
+      await new Promise(resolve => setTimeout(resolve, 3000)) // 等待3秒后重试
+    }
+  }
+
+  throw new Error('所有重试都失败了')
 }
 
 async function downloadKuaishouVideo (pageUrl: string) {
