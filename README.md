@@ -84,7 +84,7 @@ Options:
 ## 📺 演示效果
 
 <div align="center">
-<img src="./demo.png" width="800" />
+<img src="./assets/demo.png" width="800" />
 <br />
 <em>命令行下载演示</em>
 </div>
