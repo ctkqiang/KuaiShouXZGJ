@@ -8,9 +8,13 @@
     "start": "bun run src/app.ts",
     "dev": "bun --watch src/app.ts",
     "build": "bun build src/app.ts --outdir dist",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "tauri:init": "bunx @tauri-apps/cli init",
+    "tauri:dev": "bunx @tauri-apps/cli dev",
+    "tauri:build": "bunx @tauri-apps/cli build"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.2.7",
     "@types/bun": "latest"
   },
   "peerDependencies": {
